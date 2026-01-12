@@ -20,7 +20,7 @@ Vous devez **modifier** et **étendre** ce code, pas repartir de zéro.
 
 ---
 
-# PARTIE A — Protocole de commandes (TCP) (45 min)
+# PARTIE A — Protocole de commandes (TCP) 
 
 ## A1) Objectif
 Transformer l’echo en un serveur de commandes.
