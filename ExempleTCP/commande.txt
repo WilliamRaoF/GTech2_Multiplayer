@@ -1,0 +1,2 @@
+cl /EHsc tcp_client.cpp ws2_32.lib
+cl /EHsc tcp_server.cpp ws2_32.lib
