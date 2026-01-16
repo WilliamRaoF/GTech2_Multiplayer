@@ -445,3 +445,242 @@ Test attendu :
 - la victime réapparaît
 - son score de morts a augmenté
 - le tueur a gagné un kill
+
+
+# Partie 3 – Player Host / Menu Host-Join + gestion retour Menu (Listen Server)
+Objectif : ajouter une **vraie boucle de jeu multi** :
+- un **menu** avec boutons **HOST / JOIN**
+- un joueur peut **héberger** (Listen Server)
+- un joueur peut **rejoindre** via IP
+- gestion **retour menu / quitter partie**
+- gestion **Network Failure** (si le host quitte)
+
+---
+
+## Organisation générale des Blueprints (Partie 3)
+
+Blueprints à créer :
+- `BP_GameInstance_Multi`
+- `WBP_MainMenu`
+- `WBP_InGameMenu`
+
+Maps :
+- `Map_Menu`
+- `Map_Game`
+
+---
+
+# TP5 — Menu Host / Join (Listen Server)
+
+## 1. Création des maps
+
+### 1.1 Créer `Map_Menu`
+Créer une map menu simple :
+- vide (ou avec décor)
+- caméra (optionnel)
+
+### 1.2 Vérifier `Map_Game`
+Ta map multi doit contenir au minimum :
+- `PlayerStart`
+- ton `BP_GameMode_Multi` assigné dans World Settings
+
+---
+
+## 2. Création du GameInstance
+
+### 2.1 Créer `BP_GameInstance_Multi`
+- Blueprint Class : `GameInstance`
+- Nom : `BP_GameInstance_Multi`
+
+Ensuite dans :
+**Project Settings → Maps & Modes**
+- Game Instance Class = `BP_GameInstance_Multi`
+
+---
+
+## 3. Création du menu UI
+
+### 3.1 Créer widget `WBP_MainMenu`
+Créer Widget Blueprint : `WBP_MainMenu`
+
+Ajouter dans le Designer :
+- Bouton `BTN_Host`
+- Bouton `BTN_Join`
+- EditableTextBox `ETB_IP`
+  - Hint : `127.0.0.1`
+  - default value : `127.0.0.1`
+- TextBlock `TXT_Status` (optionnel)
+
+---
+
+## 4. Affichage du menu dans `Map_Menu`
+
+### 4.1 Level Blueprint de Map_Menu
+Dans `Map_Menu` → Level Blueprint :
+
+**Event BeginPlay**
+- `Create Widget` (WBP_MainMenu)
+- `Add To Viewport`
+- `Get Player Controller`
+- `Set Show Mouse Cursor(true)`
+- `Set Input Mode UI Only`
+
+> À ce stade, quand tu Play, tu dois arriver sur le menu.
+
+---
+
+## 5. Logique Host / Join (dans GameInstance)
+
+> Pourquoi GameInstance ?
+> - persiste entre les maps (menu → game)
+> - endroit idéal pour gérer réseau/retour menu/erreurs
+
+### 5.1 Fonctions / Events à créer dans BP_GameInstance_Multi
+
+Créer ces Custom Events :
+- `HostGame`
+- `JoinGame` (Input : `IP` string)
+- `ReturnToMenu`
+- `HandleNetworkFailure` (plus tard)
+
+---
+
+## 6. Implémentation HOST (Listen Server)
+
+### 6.1 Event `HostGame`
+Dans `BP_GameInstance_Multi` :
+
+`HostGame` :
+- `Open Level`
+  - Level Name : `Map_Game`
+  - Options : `listen`
+
+
+Résultat : le host lance la partie et devient serveur.
+
+---
+
+## 7. Implémentation JOIN (open IP)
+
+### 7.1 Event `JoinGame(IP)`
+Dans `BP_GameInstance_Multi` :
+
+`JoinGame` :
+- `Get First Local Player Controller`
+- `Execute Console Command`
+  - Command : `"open " + IP`
+
+Exemples IP :
+- `127.0.0.1` (tests sur la même machine)
+- `192.168.X.X` (LAN)
+
+---
+
+## 8. Brancher les boutons du menu
+
+### 8.1 BTN_Host → OnClicked
+Dans `WBP_MainMenu` Graph :
+- `Get Game Instance`
+- `Cast to BP_GameInstance_Multi`
+- Appeler `HostGame`
+
+### 8.2 BTN_Join → OnClicked
+- `ETB_IP → GetText`
+- Convert Text -> String
+- `Get Game Instance`
+- Cast
+- Appeler `JoinGame(IPString)`
+
+---
+
+# TP6 — Quitter une partie + retour menu propre
+
+## 1. Créer un menu in-game (optionnel mais recommandé)
+
+### 1.1 Widget `WBP_InGameMenu`
+Créer Widget Blueprint : `WBP_InGameMenu`
+
+Ajouter :
+- Bouton `BTN_Resume`
+- Bouton `BTN_QuitToMenu`
+
+---
+
+## 2. Afficher le menu InGame (dans PlayerController)
+
+### 2.1 Modifier `BP_PlayerController_Multi`
+Ajouter variables :
+- `InGameMenuRef` (type `WBP_InGameMenu`)
+- `bIsMenuOpen` (bool)
+
+Créer un Input :
+**Project Settings → Input**
+- Action Mapping : `Menu`
+- Key : `Escape`
+
+Dans `BP_PlayerController_Multi` :
+
+**InputAction Menu**
+- Branch si `bIsMenuOpen`
+  - si false → Open Menu
+  - si true → Close Menu
+
+#### Open Menu (fonction)
+- `Create Widget (WBP_InGameMenu)` si `InGameMenuRef` est None
+- `Add To Viewport`
+- `Set Show Mouse Cursor(true)`
+- `Set Input Mode UI Only`
+- `bIsMenuOpen = true`
+
+#### Close Menu
+- `Remove From Parent(InGameMenuRef)`
+- `Set Show Mouse Cursor(false)`
+- `Set Input Mode Game Only`
+- `bIsMenuOpen = false`
+
+---
+
+## 3. Quitter la partie
+
+### 3.1 BTN_QuitToMenu OnClicked
+Dans `WBP_InGameMenu` :
+
+- `Get Game Instance`
+- Cast `BP_GameInstance_Multi`
+- Appeler `ReturnToMenu`
+
+---
+
+## 4. Implémenter ReturnToMenu
+
+### 4.1 Event `ReturnToMenu` dans GameInstance
+Dans `BP_GameInstance_Multi` :
+
+`ReturnToMenu` :
+- `Get First Local Player Controller`
+- `Execute Console Command` : `disconnect`
+- puis `Open Level(Map_Menu)`
+
+> Note :
+> - `disconnect` force la fin de connexion si on est client
+> - sur host listen server : la partie s’arrête (normal)
+
+---
+
+# TP7 — Gestion Network Failure (host quitte / perte réseau)
+
+Objectif :
+- si le host ferme la fenêtre → le client retourne au menu au lieu de rester bloqué
+
+## 1. Configurer Network Failure Event
+Dans `BP_GameInstance_Multi` :
+
+Utiliser l’event :
+- `Event Network Error` / `On Network Failure` (selon version UE / nodes disponibles)
+
+### 1.1 Implémentation
+- Afficher Print String : "NETWORK FAILURE"
+- `Open Level(Map_Menu)`
+
+Optionnel :
+- afficher une popup UI avec message propre
